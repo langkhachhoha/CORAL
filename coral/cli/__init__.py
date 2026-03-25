@@ -76,7 +76,7 @@ class _MainParser(_HelpOnErrorParser):
                 matches = difflib.get_close_matches(bad_cmd, _VISIBLE_COMMANDS, n=3, cutoff=0.5)
                 sys.stderr.write(f"\nerror: unknown command '{bad_cmd}'\n")
                 if matches:
-                    sys.stderr.write(f"\nDid you mean?\n")
+                    sys.stderr.write("\nDid you mean?\n")
                     for m in matches:
                         sys.stderr.write(f"  coral {m}\n")
                 sys.stderr.write("\n")
@@ -271,6 +271,8 @@ Run 'coral <command> --help' for details on any command."""
     p_notes.add_argument("--search", "-s", help="Search notes by keyword")
     p_notes.add_argument("-n", "--recent", type=int, help="Show N most recent")
     p_notes.add_argument("--read", "-r", help="Read a specific note by number or name")
+    p_notes.add_argument("--history", action="store_true", help="Show shared state checkpoint history")
+    p_notes.add_argument("--diff", metavar="HASH", help="Show diff for a checkpoint commit")
     _add_run_args(p_notes)
 
     p_skills = sub.add_parser(
