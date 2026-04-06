@@ -114,8 +114,9 @@ Each agent runs in its own git worktree branch. Shared state (attempts, notes, s
 | **Shared state** | `.coral/` directory with attempts, notes, and skills — symlinked into every worktree |
 | **Eval loop** | Agents call `uv run coral eval -m "..."` to stage, commit, and grade in one shot |
 | **CLI orchestration** | 17+ commands: `start`, `stop`, `status`, `eval`, `log`, `ui`, and more |
-| **Warm-start** | Optional research phase — agents do literature review via web search before coding, writing findings to shared notes |
 | **Web dashboard** | `uv run coral ui` — real-time leaderboard, attempt diffs, agent monitoring |
+
+**Warm-start (optional):** Agents do a literature review via web search before coding, writing findings to shared notes. Enable with `agents.warmstart.enabled=true`.
 
 ### Quick Start
 
