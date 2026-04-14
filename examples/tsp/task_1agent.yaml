@@ -1,5 +1,5 @@
 task:
-  name: tsp
+  name: tsp-1agent
   description: |
     Find the shortest round-trip tour through 100 cities. The coordinates
     are generated via random with a fixed seed in `solution.py`. DO NOT MODIFY the seed or CITIES generation!
