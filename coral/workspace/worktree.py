@@ -179,20 +179,26 @@ def setup_claude_settings(
     claude_dir.mkdir(exist_ok=True)
 
     private_dir = str(coral_dir.resolve() / "private")
+    public_dir = str(coral_dir.resolve() / "public")
     agents_dir = str(coral_dir.resolve().parent / "agents")
     worktree_str = str(worktree_path.resolve())
     private_pattern = f"{private_dir}/**"
+    public_pattern = f"{public_dir}/**"
     agents_pattern = f"{agents_dir}/**"
     worktree_pattern = f"{worktree_str}/**"
 
-    # Allow rules grant agent autonomy without --dangerously-skip-permissions
-    # Bash/Edit/Write are scoped to the agent's own worktree via allow + deny rules
+    # Allow rules grant agent autonomy without --dangerously-skip-permissions.
+    # Agents need Read/Write on .coral/public/ because .claude/{notes,skills,...}
+    # are symlinks that Claude Code resolves to the real path outside the worktree.
     allow_rules: list[str] = [
         "Bash",
         f"Read(/{worktree_pattern})",
         f"Read(/{agents_pattern})",
+        f"Read(/{public_pattern})",
         f"Edit(/{worktree_pattern})",
+        f"Edit(/{public_pattern})",
         f"Write(/{worktree_pattern})",
+        f"Write(/{public_pattern})",
     ]
     if research:
         allow_rules.extend(["WebSearch", "WebFetch"])

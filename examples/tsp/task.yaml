@@ -1,0 +1,25 @@
+task:
+  name: tsp
+  description: |
+    Find the shortest round-trip tour through 100 cities. The coordinates
+    are generated via random with a fixed seed in `solution.py`. DO NOT MODIFY the seed or CITIES generation!
+
+    solution.py must print 100 integers (0-99) to stdout, one per line,
+    representing the visit order. Each city must appear exactly once.
+
+    The grader computes the total Euclidean round-trip distance
+    and returns -distance as the score (shorter = higher).
+
+grader:
+  type: function
+  module: eval.grader
+
+agents:
+  count: 1
+  runtime: claude_code
+  model: claude-sonnet-4-6
+  max_turns: 100
+
+workspace:
+  results_dir: "./results"
+  repo_path: "./examples/tsp/seed"
