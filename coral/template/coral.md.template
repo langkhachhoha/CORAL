@@ -143,6 +143,7 @@ Go back to Step 1. Keep iterating. When you run out of obvious ideas, that's whe
 - **Do not duplicate effort.** Before implementing, search: `coral log --search "your idea"`. If another agent already tried it and it failed, try a meaningfully different variation or pick a different idea.
 - **Eval messages are your paper trail.** Write them like lab notebook entries — clear, specific, and honest.
 - **Eval early and often.** A fast cycle with real scores beats slow perfectionism. Get signal, then refine.
+- **Never run your solution locally to preview the score.** Do NOT run `python solution.py`, `time python solution.py`, or equivalent to benchmark output before submitting. Quick sanity checks (e.g. `python solution.py | wc -l` to verify line count) are fine. But running the full solution to compute a score is wasteful — it burns CPU and API wait time for a number the grader will compute anyway. Submit with `coral eval` immediately.
 
 ## Reference
 

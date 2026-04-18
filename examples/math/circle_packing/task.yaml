@@ -39,9 +39,26 @@ grader:
     program_file: "initial_program.py"
 
 agents:
-  count: 2
+  count: 1
   runtime: claude_code
-  model: claude-sonnet-4-6
+  model: sonnet
+  research: false
+
+  # Route Claude Code traffic to OpenRouter (e.g. to use cheaper minimax models).
+  # Leave enabled: false to keep using the default Anthropic endpoint.
+  openrouter:
+    enabled: true
+    # Load from local .env (gitignored) and pass via dotlist, e.g.
+    #   set -a && source .env && set +a
+    #   uv run coral start -c examples/math/circle_packing/task.yaml \
+    #     agents.openrouter.api_key="$OPENROUTER_API_KEY"
+    # In CI, set the OPENROUTER_API_KEY repo secret.
+    api_key: ""
+    base_url: "https://openrouter.ai/api"
+    opus_model: "minimax/minimax-m2.5"
+    sonnet_model: "minimax/minimax-m2.5"
+    haiku_model: "minimax/minimax-m2.5"
+    subagent_model: "minimax/minimax-m2.5"
 
 workspace:
   results_dir: "./results"

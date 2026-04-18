@@ -48,6 +48,10 @@ class OpenCodeRuntime:
     """
 
     @property
+    def name(self) -> str:
+        return "opencode"
+
+    @property
     def instruction_filename(self) -> str:
         return "AGENTS.md"
 

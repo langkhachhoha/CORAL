@@ -10,8 +10,8 @@ import subprocess
 from pathlib import Path
 
 from coral.workspace.repo import (
-    run_setup_commands,
     _clean_env,
+    run_setup_commands,
 )
 
 logger = logging.getLogger(__name__)
@@ -84,7 +84,7 @@ def create_agent_worktree(repo_path: Path, agent_id: str, agents_dir: Path) -> P
 def setup_gitignore(worktree_path: Path) -> None:
     """Write .gitignore to exclude CORAL-managed files from git."""
     gitignore_path = worktree_path / ".gitignore"
-    entries = {".coral_agent_id", ".coral_dir", "CLAUDE.md", "AGENTS.md", ".claude/", ".codex/", ".opencode/", ".venv/"}
+    entries = {".coral_agent_id", ".coral_dir", "CLAUDE.md", "AGENTS.md", ".claude/", ".shared/", ".codex/", ".opencode/", ".venv/"}
 
     # Preserve existing entries
     existing = set()
@@ -167,6 +167,7 @@ def setup_claude_settings(
     research: bool = True,
     gateway_url: str | None = None,
     gateway_api_key: str | None = None,
+    extra_env: dict[str, str] | None = None,
 ) -> None:
     """Write Claude Code settings.json with permissions and gateway env.
 
@@ -174,6 +175,9 @@ def setup_claude_settings(
     --dangerously-skip-permissions).  When a gateway is configured, sets
     ANTHROPIC_BASE_URL and ANTHROPIC_API_KEY in the settings ``env`` so
     they override the user's global ``~/.claude/settings.json``.
+
+    ``extra_env`` (e.g. OpenRouter credentials + model mappings) is merged
+    into the settings ``env`` block last, overriding any earlier values.
     """
     claude_dir = worktree_path / ".claude"
     claude_dir.mkdir(exist_ok=True)
@@ -188,20 +192,23 @@ def setup_claude_settings(
     worktree_pattern = f"{worktree_str}/**"
 
     # Allow rules grant agent autonomy without --dangerously-skip-permissions.
-    # Agents need Read/Write on .coral/public/ because .claude/{notes,skills,...}
-    # are symlinks that Claude Code resolves to the real path outside the worktree.
+    # Agents need Read/Write on .coral/public/ because .shared/{notes,skills,...}
+    # are symlinks that resolve to the real path outside the worktree.
+    # Explicitly allowing .coral/public/** (the symlink target) ensures both
+    # the Write tool and Bash absolute-path writes succeed.
     allow_rules: list[str] = [
         "Bash",
         f"Read(/{worktree_pattern})",
         f"Read(/{agents_pattern})",
-        f"Read(/{public_pattern})",
         f"Edit(/{worktree_pattern})",
-        f"Edit(/{public_pattern})",
         f"Write(/{worktree_pattern})",
+        # Shared public dir: symlink target for .shared/{notes,skills,...} symlinks.
+        f"Read(/{public_pattern})",
+        f"Edit(/{public_pattern})",
         f"Write(/{public_pattern})",
     ]
-    if research:
-        allow_rules.extend(["WebSearch", "WebFetch"])
+    # if research:
+    #     deny_rules.extend(["WebSearch", "WebFetch"])
 
     # Deny rules block git and private dir access.
     # Edit/Write/Bash don't need agents_pattern denies — the scoped allows
@@ -220,19 +227,23 @@ def setup_claude_settings(
         },
     }
 
-    # Route agent traffic through gateway by overriding env in settings.
+    # Route agent traffic through gateway/openrouter by overriding env in settings.
     # Claude Code reads env vars from settings, not the OS environment,
     # so process-level env vars have no effect.
+    env: dict[str, str] = {}
     if gateway_url or gateway_api_key:
-        env: dict[str, str] = {}
         if gateway_url:
             env["ANTHROPIC_BASE_URL"] = gateway_url
         if gateway_api_key:
             env["ANTHROPIC_API_KEY"] = gateway_api_key
         # Clear custom headers so the agent doesn't send them to the
-        # local gateway — LiteLLM handles upstream headers via its own
-        # config.  Without this, headers from the user's global settings
+        # local gateway — LiteLLM handles upstream headers via its own config.
         env["ANTHROPIC_CUSTOM_HEADERS"] = ""
+
+    if extra_env:
+        env.update(extra_env)
+
+    if env:
         settings["env"] = env
 
     settings_path = claude_dir / "settings.json"

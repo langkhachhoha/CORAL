@@ -51,6 +51,10 @@ class CodexRuntime:
     """Spawn and manage OpenAI Codex CLI agent subprocesses."""
 
     @property
+    def name(self) -> str:
+        return "codex"
+
+    @property
     def instruction_filename(self) -> str:
         return "AGENTS.md"
 

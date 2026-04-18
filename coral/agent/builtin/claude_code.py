@@ -19,12 +19,20 @@ class ClaudeCodeRuntime:
     """Spawn and manage Claude Code agent subprocesses."""
 
     @property
+    def name(self) -> str:
+        return "claude_code"
+
+    @property
     def instruction_filename(self) -> str:
         return "CLAUDE.md"
 
     @property
     def shared_dir_name(self) -> str:
-        return ".claude"
+        # Use ".shared" instead of ".claude" because Claude Code has a hardcoded
+        # "sensitive file" protection for the .claude/ directory that blocks
+        # Write/Edit/Bash operations even when allow rules permit them.
+        # .claude/settings.json is written separately by setup_claude_settings().
+        return ".shared"
 
     def extract_session_id(self, log_path: Path) -> str | None:
         return _extract_session_id(log_path)

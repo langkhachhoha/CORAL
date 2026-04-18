@@ -54,6 +54,25 @@ class GatewayConfig:
 
 
 @dataclass
+class OpenRouterConfig:
+    """OpenRouter integration for Claude Code.
+
+    When enabled, routes Claude Code traffic to OpenRouter via the
+    Anthropic-compatible endpoint so you can run cheaper/alternative
+    models (e.g. minimax) through the same client.  Takes precedence
+    over the built-in gateway when both are set.
+    """
+
+    enabled: bool = False
+    api_key: str = ""  # OpenRouter API key (sk-or-v1-...)
+    base_url: str = "https://openrouter.ai/api"
+    opus_model: str = "minimax/minimax-m2.5"
+    sonnet_model: str = "minimax/minimax-m2.5"
+    haiku_model: str = "minimax/minimax-m2.5"
+    subagent_model: str = "minimax/minimax-m2.5"
+
+
+@dataclass
 class WarmStartConfig:
     """Warm-start configuration: optional research phase before the main coding loop."""
 
@@ -69,6 +88,7 @@ class AgentConfig:
     runtime: str = "claude_code"
     model: str = "sonnet"
     gateway: GatewayConfig = field(default_factory=GatewayConfig)
+    openrouter: OpenRouterConfig = field(default_factory=OpenRouterConfig)
     warmstart: WarmStartConfig = field(default_factory=WarmStartConfig)
     runtime_options: dict[str, Any] = field(default_factory=dict)
     max_turns: int = 200

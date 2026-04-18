@@ -60,6 +60,10 @@ Thumbs.db
 # Project specific
 *.log
 .env
+.env.*
+secrets.env
+secrets.yaml
+secrets/
 scripts/tmp_*/
 *.out
 

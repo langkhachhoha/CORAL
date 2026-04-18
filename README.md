@@ -21,7 +21,7 @@
 </div>
 
 <p align="center">
-<a href="#installation">Installation</a> · <a href="#supported-agents">Supported Agents</a> · <a href="#usage">Usage</a> · <a href="#how-it-works">How It Works</a> · <a href="#quick-start">Quick Start</a> · <a href="#cli-reference">CLI Reference</a> · <a href="#using-opencode">OpenCode</a> · <a href="#using-the-gateway-for-custom-models">Gateway</a> · <a href="#examples">Examples</a> · <a href="#license">License</a>
+<a href="#installation">Installation</a> · <a href="#supported-agents">Supported Agents</a> · <a href="#usage">Usage</a> · <a href="#how-it-works">How It Works</a> · <a href="#quick-start">Quick Start</a> · <a href="#cli-reference">CLI Reference</a> · <a href="#using-opencode">OpenCode</a> · <a href="#using-the-gateway-for-custom-models">Gateway</a> · <a href="#using-openrouter-cheap-models-via-claude-code">OpenRouter</a> · <a href="#examples">Examples</a> · <a href="#license">License</a>
 </p>
 
 
@@ -383,6 +383,69 @@ agents:
 When you run `coral start`, the gateway starts before agents are spawned, and all agent API requests are routed through it. The gateway automatically assigns each agent a unique proxy key for per-agent request tracking.
 
 See `examples/circle_packing/` for a complete working example using OpenCode with the gateway.
+
+### Using OpenRouter (cheap models via Claude Code)
+
+Running agents on Opus/Sonnet can get expensive fast. [OpenRouter](https://openrouter.ai/) exposes an **Anthropic-compatible** endpoint, which means Claude Code can talk to it natively while you pay per-token for much cheaper models like `minimax/minimax-m2.5`, `qwen`, `mistral`, etc.
+
+CORAL wires this up for you: set a block in your `task.yaml` and every agent worktree gets a `.claude/settings.json` whose `env` points Claude Code at OpenRouter.
+
+**1. Get an OpenRouter API key** from [openrouter.ai/keys](https://openrouter.ai/keys) (starts with `sk-or-v1-...`).
+
+**2. Add the `openrouter` block to your `task.yaml`:**
+
+```yaml
+agents:
+  count: 1
+  runtime: claude_code
+  model: sonnet            # this is what CORAL passes to --model; OpenRouter re-maps it below
+  max_turns: 100
+
+  openrouter:
+    enabled: true
+    api_key: "sk-or-v1-YOUR_KEY_HERE"
+    base_url: "https://openrouter.ai/api"
+    # Map each Anthropic model tier → an OpenRouter model slug.
+    # Use the same slug in all four to force every Claude Code call onto one model.
+    opus_model:     "minimax/minimax-m2.5"
+    sonnet_model:   "minimax/minimax-m2.5"
+    haiku_model:    "minimax/minimax-m2.5"
+    subagent_model: "minimax/minimax-m2.5"
+```
+
+**3. Run normally:**
+
+```bash
+uv run coral start -c task.yaml
+```
+
+Under the hood, CORAL injects these env vars into `.claude/settings.json` for each agent:
+
+| Env var                          | Purpose                                              |
+| -------------------------------- | ---------------------------------------------------- |
+| `ANTHROPIC_BASE_URL`             | Points Claude Code at `https://openrouter.ai/api`    |
+| `ANTHROPIC_AUTH_TOKEN`           | Your OpenRouter `sk-or-v1-...` key                   |
+| `ANTHROPIC_API_KEY`              | Cleared (prevents the real Anthropic key from leaking) |
+| `ANTHROPIC_DEFAULT_OPUS_MODEL`   | OpenRouter slug served when agent requests `opus`    |
+| `ANTHROPIC_DEFAULT_SONNET_MODEL` | Same, for `sonnet`                                   |
+| `ANTHROPIC_DEFAULT_HAIKU_MODEL`  | Same, for `haiku`                                    |
+| `CLAUDE_CODE_SUBAGENT_MODEL`     | Model used for Claude Code's internal Task subagents |
+| `ANTHROPIC_CUSTOM_HEADERS`       | Cleared so user-level headers don't bleed through    |
+
+**Dotlist overrides** work as usual — handy for flipping OpenRouter on from the CLI without editing YAML:
+
+```bash
+uv run coral start -c task.yaml \
+  agents.openrouter.enabled=true \
+  agents.openrouter.api_key=sk-or-v1-xxxxx \
+  agents.openrouter.sonnet_model=minimax/minimax-m2.5
+```
+
+> **Notes**
+>
+> - OpenRouter takes precedence over the built-in LiteLLM gateway. Don't set `gateway.enabled: true` and `openrouter.enabled: true` at the same time.
+> - Only the `claude_code` runtime reads this block. For Codex / OpenCode, use the [gateway](#using-the-gateway-for-custom-models) or set the runtime's own `base_url` / `api_key` fields.
+> - Model quality varies wildly on OpenRouter. If an agent spins or produces bad output, swap the model slug for a stronger one (e.g. `anthropic/claude-sonnet-4.6`, `google/gemini-2.5-pro`) — CORAL's plumbing stays the same.
 
 ### Examples
 

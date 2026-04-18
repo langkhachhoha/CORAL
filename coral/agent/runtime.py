@@ -8,7 +8,7 @@ import os
 import signal
 import subprocess
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import IO, Any, Protocol, runtime_checkable
 
@@ -38,6 +38,11 @@ class AgentRuntime(Protocol):
     ) -> AgentHandle: ...
 
     def extract_session_id(self, log_path: Path) -> str | None: ...
+
+    @property
+    def name(self) -> str:
+        """Runtime identifier (e.g. 'claude_code', 'codex', 'opencode', 'kiro')."""
+        ...
 
     @property
     def instruction_filename(self) -> str:
@@ -183,7 +188,7 @@ def write_coral_log_entry(
         "source": source,
         "agent_id": agent_id,
         "prompt": prompt,
-        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "timestamp": datetime.now(UTC).isoformat(),
     }
     if session_id:
         entry["session_id"] = session_id

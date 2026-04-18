@@ -35,8 +35,8 @@ from coral.workspace import (
     create_project,
     setup_claude_settings,
     setup_codex_settings,
-    setup_opencode_settings,
     setup_gitignore,
+    setup_opencode_settings,
     setup_shared_state,
     setup_worktree_env,
     write_agent_id,
@@ -236,22 +236,27 @@ class AgentManager:
         gateway_url = self._gateway.url if self._gateway else None
         gateway_api_key = self._gateway_keys.get(agent_id)
 
+        # Build OpenRouter env overrides (claude_code only; other runtimes ignore).
+        openrouter_env = _build_openrouter_env(self.config.agents.openrouter)
+
         # Runtime-specific: write permission settings per worktree
-        if shared_dir_name == ".claude":
+        runtime_name = self.runtime.name
+        if runtime_name == "claude_code":
             setup_claude_settings(
                 worktree_path, coral_dir=self.paths.coral_dir,
                 research=self.config.agents.research,
                 gateway_url=gateway_url,
                 gateway_api_key=gateway_api_key,
+                extra_env=openrouter_env or None,
             )
-        elif shared_dir_name == ".opencode":
+        elif runtime_name == "opencode":
             setup_opencode_settings(
                 worktree_path, coral_dir=self.paths.coral_dir,
                 research=self.config.agents.research,
                 gateway_url=gateway_url,
                 gateway_api_key=gateway_api_key,
             )
-        elif shared_dir_name == ".codex":
+        elif runtime_name == "codex":
             setup_codex_settings(
                 worktree_path, coral_dir=self.paths.coral_dir,
                 research=self.config.agents.research,
@@ -277,6 +282,16 @@ class AgentManager:
         )
         (worktree_path / instruction_file).write_text(coral_md)
 
+        # If OpenRouter is enabled, override gateway env passed to runtime so the
+        # child process inherits the OpenRouter endpoint (settings.json already
+        # has them; this covers non-settings-aware codepaths).
+        if openrouter_env:
+            runtime_gateway_url = openrouter_env.get("ANTHROPIC_BASE_URL") or gateway_url
+            runtime_gateway_api_key = openrouter_env.get("ANTHROPIC_AUTH_TOKEN") or gateway_api_key
+        else:
+            runtime_gateway_url = gateway_url
+            runtime_gateway_api_key = gateway_api_key
+
         # Start agent
         handle = self.runtime.start(
             worktree_path=worktree_path,
@@ -291,8 +306,8 @@ class AgentManager:
             prompt_source=prompt_source,
             task_name=self.config.task.name,
             task_description=self.config.task.description,
-            gateway_url=gateway_url,
-            gateway_api_key=gateway_api_key,
+            gateway_url=runtime_gateway_url,
+            gateway_api_key=runtime_gateway_api_key,
         )
         return handle
 
@@ -379,8 +394,8 @@ class AgentManager:
             "Before writing any code, review the current state:\n"
             "1. Run `coral log` to see the leaderboard\n"
             "2. Run `coral log --recent` to see recent activity\n"
-            "3. Read notes in your shared directory (e.g. `.claude/notes/`)\n"
-            "4. Check skills in your shared directory (e.g. `.claude/skills/`)\n"
+            "3. Read notes in your shared directory\n"
+            "4. Check skills in your shared directory\n"
             "5. Inspect top attempts with `coral show <hash>` to understand what's been tried\n\n"
             "Build on what worked. Don't duplicate prior efforts."
         )
@@ -847,6 +862,27 @@ class AgentManager:
                 f = self.paths.coral_dir / "public" / name
                 if f.exists():
                     f.unlink()
+
+
+def _build_openrouter_env(cfg: Any) -> dict[str, str]:
+    """Build the env dict for Claude Code when OpenRouter is enabled.
+
+    Returns an empty dict when disabled so callers can treat falsy → off.
+    """
+    if not getattr(cfg, "enabled", False):
+        return {}
+    if not cfg.api_key:
+        logger.warning("OpenRouter enabled but api_key is empty — requests will fail.")
+    return {
+        "ANTHROPIC_BASE_URL": cfg.base_url,
+        "ANTHROPIC_AUTH_TOKEN": cfg.api_key,
+        "ANTHROPIC_API_KEY": "",
+        "ANTHROPIC_DEFAULT_OPUS_MODEL": cfg.opus_model,
+        "ANTHROPIC_DEFAULT_SONNET_MODEL": cfg.sonnet_model,
+        "ANTHROPIC_DEFAULT_HAIKU_MODEL": cfg.haiku_model,
+        "CLAUDE_CODE_SUBAGENT_MODEL": cfg.subagent_model,
+        "ANTHROPIC_CUSTOM_HEADERS": "",
+    }
 
 
 def _session_exists(session_id: str, coral_dir: Path | None = None) -> bool:

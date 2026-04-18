@@ -19,6 +19,10 @@ class KiroRuntime:
     """Spawn and manage Kiro CLI agent subprocesses."""
 
     @property
+    def name(self) -> str:
+        return "kiro"
+
+    @property
     def instruction_filename(self) -> str:
         return "KIRO.md"
 
