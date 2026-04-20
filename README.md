@@ -21,7 +21,7 @@
 </div>
 
 <p align="center">
-<a href="#installation">Installation</a> · <a href="#supported-agents">Supported Agents</a> · <a href="#usage">Usage</a> · <a href="#how-it-works">How It Works</a> · <a href="#quick-start">Quick Start</a> · <a href="#cli-reference">CLI Reference</a> · <a href="#using-opencode">OpenCode</a> · <a href="#using-the-gateway-for-custom-models">Gateway</a> · <a href="#using-openrouter-cheap-models-via-claude-code">OpenRouter</a> · <a href="#examples">Examples</a> · <a href="#license">License</a>
+<a href="#installation">Installation</a> · <a href="#supported-agents">Supported Agents</a> · <a href="#usage">Usage</a> · <a href="#how-it-works">How It Works</a> · <a href="#quick-start">Quick Start</a> · <a href="#cli-reference">CLI Reference</a> · <a href="#using-opencode">OpenCode</a> · <a href="#using-the-gateway-for-custom-models">Gateway</a> · <a href="#using-openrouter-cheap-models-via-claude-code">OpenRouter</a> · <a href="#running-benchmarks-on-github-actions">GitHub Actions</a> · <a href="#examples">Examples</a> · <a href="#license">License</a>
 </p>
 
 
@@ -446,6 +446,104 @@ uv run coral start -c task.yaml \
 > - OpenRouter takes precedence over the built-in LiteLLM gateway. Don't set `gateway.enabled: true` and `openrouter.enabled: true` at the same time.
 > - Only the `claude_code` runtime reads this block. For Codex / OpenCode, use the [gateway](#using-the-gateway-for-custom-models) or set the runtime's own `base_url` / `api_key` fields.
 > - Model quality varies wildly on OpenRouter. If an agent spins or produces bad output, swap the model slug for a stronger one (e.g. `anthropic/claude-sonnet-4.6`, `google/gemini-2.5-pro`) — CORAL's plumbing stays the same.
+
+### Running benchmarks on GitHub Actions
+
+CORAL ships with a **manual-trigger workflow** at [`.github/workflows/benchmark-tsp.yml`](.github/workflows/benchmark-tsp.yml) that runs the TSP benchmark end-to-end on a GitHub-hosted runner, using OpenRouter for the model backend. Use this as a working template when you want to automate any other benchmark.
+
+#### Prerequisites (one-time)
+
+1. **Fork or own the repo on GitHub.** Workflows only run on branches you own.
+2. **Add your OpenRouter API key as a repo secret.** On your repo page: **Settings → Secrets and variables → Actions → New repository secret**
+   - **Name:** `OPENROUTER_API_KEY`
+   - **Value:** your `sk-or-v1-...` key from [openrouter.ai/keys](https://openrouter.ai/keys)
+
+   The workflow fails early with an actionable error if the secret is missing — nothing is charged until the key is set.
+
+#### Trigger a run
+
+1. Open the **Actions** tab at the top of your GitHub repo.
+2. In the left sidebar pick **Benchmark — TSP**.
+3. Click **Run workflow** (top-right). A modal appears with four text inputs.
+4. Keep the defaults (or override — see below) and click the green **Run workflow** button.
+
+#### Inputs
+
+All four are [`workflow_dispatch`](https://docs.github.com/en/actions/using-workflows/events-that-trigger-workflows#workflow_dispatch) inputs and appear as text boxes in the "Run workflow" modal.
+
+| Input | Default | Meaning |
+| --- | --- | --- |
+| `task_file` | `examples/tsp/task_1agent.yaml` | Task YAML to run, path relative to repo root. Swap in any other task YAML here. |
+| `max_turns` | `100` | Max turns per agent before it reboots. Larger = longer run + more tokens. |
+| `agents_count` | `1` | Number of parallel agents. Each one independently consumes tokens. |
+| `sonnet_model` | `minimax/minimax-m2.5` | OpenRouter model slug. Applied to **all four** tiers (opus/sonnet/haiku/subagent) so every Claude Code call hits the same model. |
+
+#### What the workflow does
+
+1. **Checkout** the repo.
+2. **Setup Python 3.12** + **install `uv`** (with cache).
+3. **`uv sync --extra dev`** to install CORAL.
+4. **Run `coral start`** with dotlist overrides:
+   - `run.session=local` — no tmux/docker (CI has no TTY).
+   - `run.verbose=true` — stream agent turns straight into the CI log.
+   - `agents.openrouter.api_key="$OPENROUTER_API_KEY"` — injects the secret into each agent's `.claude/settings.json` (`ANTHROPIC_AUTH_TOKEN`).
+   - `agents.openrouter.{opus,sonnet,haiku,subagent}_model=<input>` — forces the chosen slug onto every tier.
+5. **Print the leaderboard** with `uv run coral log` (runs `if: always()` so you still see it on failure/timeout).
+6. **Upload `results/`** as an artifact named `tsp-results-<run_id>` (retention: 14 days).
+
+Job timeout: **30 minutes** (`timeout-minutes: 30`). Raise it in the workflow file for longer runs.
+
+#### Outputs
+
+1. **Live CI log** — agent output + the final leaderboard, visible as the run progresses and archived on the workflow run page.
+2. **Artifact `tsp-results-<run_id>`** — the entire `results/<task>/<timestamp>/` directory, zipped. Download from the workflow run page and inspect locally:
+   - `.coral/public/attempts/` — one JSON per commit, with score and metadata.
+   - `.coral/public/notes/`, `skills/` — shared agent knowledge.
+   - `.coral/public/logs/` — raw agent stdout/stderr.
+   - `agents/agent-*/`, `repo/` — the git worktrees with every commit.
+
+   Open it in the dashboard locally:
+
+   ```bash
+   unzip tsp-results-<run_id>.zip -d ./
+   uv run coral ui                     # pick the run from the dropdown
+   ```
+
+#### Observing progress
+
+- **Live text** is available in the CI log streaming view while the workflow runs.
+- **Live web UI is not exposed by default.** GitHub-hosted runners sit behind NAT and don't publish ports to the internet. Options if you need a live dashboard:
+  1. Add a [Cloudflare Quick Tunnel](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/do-more-with-tunnels/trycloudflare/) step that tunnels `localhost:8420` through a public `trycloudflare.com` URL.
+  2. Run a [self-hosted runner](https://docs.github.com/en/actions/hosting-your-own-runners) on your own machine and browse `localhost:8420` directly.
+  3. Post-run: download the artifact and open `coral ui` locally (no setup).
+
+#### Local equivalent
+
+The workflow is just a wrapper around the same CLI you'd run locally:
+
+```bash
+set -a && source .env && set +a           # loads OPENROUTER_API_KEY into shell env
+uv run coral start -c examples/tsp/task_1agent.yaml \
+  run.session=local \
+  run.verbose=true \
+  agents.count=1 \
+  agents.max_turns=100 \
+  agents.openrouter.enabled=true \
+  agents.openrouter.api_key="$OPENROUTER_API_KEY" \
+  agents.openrouter.sonnet_model="minimax/minimax-m2.5" \
+  agents.openrouter.opus_model="minimax/minimax-m2.5" \
+  agents.openrouter.haiku_model="minimax/minimax-m2.5" \
+  agents.openrouter.subagent_model="minimax/minimax-m2.5"
+```
+
+#### Adapting to other benchmarks
+
+Copy `benchmark-tsp.yml`, rename the file + the workflow `name:` + the job id, and change:
+
+- The default `task_file` input to your new task YAML.
+- Optionally task-specific defaults for `max_turns`, `agents_count`, `sonnet_model`.
+
+The `run.session=local` + OpenRouter dotlist block stays identical across benchmarks.
 
 ### Examples
 
