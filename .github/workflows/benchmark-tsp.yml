@@ -12,7 +12,7 @@ on:
         type: string
       max_turns:
         description: "Max turns per agent (keep small to stay within the job timeout)"
-        default: "30"
+        default: "100"
         type: string
       agents_count:
         description: "Number of parallel agents"
@@ -26,8 +26,8 @@ on:
 jobs:
   tsp:
     runs-on: ubuntu-latest
-    # GitHub hosted free runners get killed after 6h. Give yourself headroom.
-    timeout-minutes: 180
+    # Keep the smoke-test short. Raise later when you want full runs.
+    timeout-minutes: 30
 
     steps:
       # 1. Pull the repository code into the runner's workspace.
