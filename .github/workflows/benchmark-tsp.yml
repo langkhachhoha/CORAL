@@ -56,7 +56,20 @@ jobs:
       - name: Install CORAL
         run: uv sync --extra dev
 
-      # 5. Run the benchmark.
+      # 5. Install the Claude Code CLI.
+      #    CORAL's `runtime: claude_code` spawns the `claude` binary as a subprocess,
+      #    so the CLI must be on PATH. We install Node LTS + the npm package.
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install Claude Code CLI
+        run: |
+          npm install -g @anthropic-ai/claude-code
+          claude --version
+
+      # 6. Run the benchmark.
       #    - run.session=local: no tmux/docker (CI has no TTY).
       #    - agents.openrouter.*: route Claude Code traffic through OpenRouter.
       #    - The API key comes from the repo secret OPENROUTER_API_KEY (see README).
@@ -81,12 +94,12 @@ jobs:
             agents.openrouter.haiku_model="${{ inputs.sonnet_model }}" \
             agents.openrouter.subagent_model="${{ inputs.sonnet_model }}"
 
-      # 6. Print a compact leaderboard so you can see the best score right in the log.
+      # 7. Print a compact leaderboard so you can see the best score right in the log.
       - name: Show leaderboard
         if: always()
         run: uv run coral log || true
 
-      # 7. Upload the entire results directory so you can download it after the run.
+      # 8. Upload the entire results directory so you can download it after the run.
       #    You'll find a "tsp-results" zip on the workflow run page.
       - name: Upload results
         if: always()
