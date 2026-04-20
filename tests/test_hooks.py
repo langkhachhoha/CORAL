@@ -207,14 +207,17 @@ def test_setup_claude_settings_permissions():
         assert any("Read" in r and agents_dir in r for r in allow)
         assert any("Edit" in r and worktree_str in r for r in allow)
         assert any("Write" in r and worktree_str in r for r in allow)
-        assert "WebSearch" in allow  # research=True by default
-        assert "WebFetch" in allow
+        # research=True (default): WebSearch/WebFetch are not listed in allow; they are
+        # permitted unless explicitly denied (see setup_claude_settings deny_rules).
+        assert "WebSearch" not in allow
+        assert "WebFetch" not in allow
 
         # Permission deny rules block git and private dir
         deny = settings["permissions"]["deny"]
         assert "Bash(git *)" in deny
         assert any(private_dir in r for r in deny)
         assert not any("WebSearch" in r for r in deny)
+        assert not any("WebFetch" in r for r in deny)
 
         assert "hooks" not in settings
 
