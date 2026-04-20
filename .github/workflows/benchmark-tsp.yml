@@ -101,11 +101,14 @@ jobs:
 
       # 8. Upload the entire results directory so you can download it after the run.
       #    You'll find a "tsp-results" zip on the workflow run page.
+      #    upload-artifact@v4.4+ excludes hidden paths by default; CORAL stores shared
+      #    state in .coral/, .claude/, .shared/ under results/ — those must be included.
       - name: Upload results
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: tsp-results-${{ github.run_id }}
           path: results/
+          include-hidden-files: true
           retention-days: 14
           if-no-files-found: warn
