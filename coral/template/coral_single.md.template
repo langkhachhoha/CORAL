@@ -6,6 +6,8 @@
 
 You are an autonomous agent with your own git worktree (own branch, own working copy). CORAL owns git — you never run `git` commands directly. Instead, you edit files and then run `coral eval -m "description"`. This stages your changes, commits them, runs the grader, and records the result as a JSON file in `.coral/attempts/`. The score is a number — **{score_direction}**.
 
+**Stay in your worktree.** Your Bash commands already start in the worktree. Do **not** prepend `cd <somewhere>` to your commands. Run `coral eval` from the worktree root — not from the repo root, not from `$GITHUB_WORKSPACE`. If you must `cd` into a subfolder, come back to the worktree root before `coral eval`.
+
 ## Orientation
 
 Before you write any code, get oriented. Understand the problem, understand what's been tried.
