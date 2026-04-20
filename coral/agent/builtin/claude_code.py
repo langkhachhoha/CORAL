@@ -99,12 +99,6 @@ class ClaudeCodeRuntime:
         venv_bin = str(worktree_path / ".venv" / "bin")
         agent_env["PATH"] = venv_bin + ":" + agent_env.get("PATH", "")
 
-        # Export CORAL_DIR so `coral eval` can still find the shared .coral
-        # directory if the agent cd's away from its worktree before calling it.
-        coral_dir_breadcrumb = worktree_path / ".coral_dir"
-        if coral_dir_breadcrumb.exists():
-            agent_env["CORAL_DIR"] = coral_dir_breadcrumb.read_text().strip()
-
         # Route through gateway if configured
         if gateway_url:
             agent_env["ANTHROPIC_BASE_URL"] = gateway_url

@@ -5,7 +5,6 @@ from __future__ import annotations
 import json
 import logging
 import multiprocessing
-import os
 import subprocess
 import traceback
 from datetime import UTC, datetime
@@ -141,29 +140,11 @@ def _run_grader_with_timeout(config_path: str, coral_dir: str, codebase_path: st
 
 
 def _find_coral_dir(workdir: Path) -> Path | None:
-    """Find the shared .coral directory.
-
-    Resolution order:
-      1. `.coral_dir` breadcrumb file in `workdir` (the normal path — agent is
-         running from its worktree).
-      2. `.coral_dir` in any parent directory (agent cd'd into a subdir).
-      3. `$CORAL_DIR` env var (agent cd'd outside the worktree entirely; the
-         runtime exports this when spawning the agent subprocess).
-    """
-    for candidate in [workdir, *workdir.parents]:
-        breadcrumb = candidate / ".coral_dir"
-        if breadcrumb.exists():
-            try:
-                return Path(breadcrumb.read_text().strip()).resolve()
-            except (OSError, ValueError):
-                break
-
-    env_dir = os.environ.get("CORAL_DIR")
-    if env_dir:
+    """Find the shared .coral directory from the .coral_dir breadcrumb file."""
+    coral_dir_file = workdir / ".coral_dir"
+    if coral_dir_file.exists():
         try:
-            resolved = Path(env_dir).resolve()
-            if resolved.exists():
-                return resolved
+            return Path(coral_dir_file.read_text().strip()).resolve()
         except (OSError, ValueError):
             pass
     return None
