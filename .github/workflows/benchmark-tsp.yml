@@ -3,6 +3,12 @@ name: Benchmark — TSP
 # "on" tells GitHub WHEN to run this workflow.
 # workflow_dispatch = manual trigger from the Actions tab (with a "Run workflow" button).
 # You can add `push:` or `schedule:` later if you want it to run automatically.
+# Opt into Node.js 24 for JS-based actions now (they default to Node 20,
+# which GitHub is deprecating — see
+# https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/).
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
 on:
   workflow_dispatch:
     inputs:
