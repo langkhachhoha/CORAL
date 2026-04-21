@@ -33,7 +33,7 @@ jobs:
   tsp:
     runs-on: ubuntu-latest
     # Keep the smoke-test short. Raise later when you want full runs.
-    timeout-minutes: 1
+    timeout-minutes: 10
 
     steps:
       # 1. Pull the repository code into the runner's workspace.
@@ -94,16 +94,61 @@ jobs:
             agents.openrouter.haiku_model="${{ inputs.sonnet_model }}" \
             agents.openrouter.subagent_model="${{ inputs.sonnet_model }}"
 
-      # 7. Dump the full shared state to the CI log — attempts, notes, skills,
-      #    and the raw `.coral/public/` tree. This is the primary way to inspect
-      #    results from a workflow run; dotfiles don't survive the artifact
-      #    upload path so we lean on the job log instead.
+      # 7. Print a compact leaderboard so you can see the best score right in the log.
+      - name: Show leaderboard
+        if: always()
+        run: uv run coral log || true
+
+      # 7b. Show every note and every skill written during the run. For each
+      #     one we print the name/header and the full body so you can inspect
+      #     them directly from the job log (no artifact download needed).
+      - name: Show notes and skills
+        if: always()
+        run: |
+          set +e
+
+          echo "=============================="
+          echo " NOTES"
+          echo "=============================="
+          uv run coral notes
+          echo
+          i=1
+          while :; do
+            out=$(uv run coral notes --read "$i" 2>/dev/null)
+            [ -z "$out" ] && break
+            echo "----- Note #$i -----"
+            echo "$out"
+            echo
+            i=$((i+1))
+            [ "$i" -gt 100 ] && break
+          done
+
+          echo "=============================="
+          echo " SKILLS"
+          echo "=============================="
+          uv run coral skills
+          echo
+          # Parse "  N. <name> — ..." from `coral skills` and dump each.
+          uv run coral skills 2>/dev/null \
+            | sed -nE 's/^[[:space:]]+[0-9]+\.[[:space:]]+([A-Za-z0-9_-]+).*/\1/p' \
+            | while read -r name; do
+                [ -z "$name" ] && continue
+                echo "----- Skill: $name -----"
+                uv run coral skills --read "$name"
+                echo
+              done
+
+      # 8. Upload the entire results directory so you can download it after the run.
+      #    You'll find a "tsp-results" zip on the workflow run page.
+      #    include-hidden-files: upload-artifact@v4 skips dotfiles by default, so
+      #    without this the .coral/, .claude/, and .shared/ folders (where all
+      #    attempts, notes, and skills live) would be stripped from the zip.
       - name: Upload results
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: tsp-results-${{ github.run_id }}
-          path: results/**/**/.coral/
+          path: results/
           retention-days: 14
           if-no-files-found: warn
           include-hidden-files: true
