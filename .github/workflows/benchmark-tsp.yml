@@ -103,7 +103,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: tsp-results-${{ github.run_id }}
-          path: results/${{ github.run_id }}/.coral/
+          path: results/**/**/.coral/
           retention-days: 14
           if-no-files-found: warn
           include-hidden-files: true
