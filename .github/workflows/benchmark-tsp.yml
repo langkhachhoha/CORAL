@@ -33,7 +33,7 @@ jobs:
   tsp:
     runs-on: ubuntu-latest
     # Keep the smoke-test short. Raise later when you want full runs.
-    timeout-minutes: 5
+    timeout-minutes: 3
 
     steps:
       # 1. Pull the repository code into the runner's workspace.
@@ -101,6 +101,9 @@ jobs:
 
       # 8. Upload the entire results directory so you can download it after the run.
       #    You'll find a "tsp-results" zip on the workflow run page.
+      #    include-hidden-files: upload-artifact@v4 skips dotfiles by default, so
+      #    without this the .coral/, .claude/, and .shared/ folders (where all
+      #    attempts, notes, and skills live) would be stripped from the zip.
       - name: Upload results
         if: always()
         uses: actions/upload-artifact@v4
@@ -109,3 +112,4 @@ jobs:
           path: results/
           retention-days: 14
           if-no-files-found: warn
+          include-hidden-files: true
