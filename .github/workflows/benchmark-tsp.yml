@@ -99,17 +99,30 @@ jobs:
         if: always()
         run: uv run coral log || true
 
-      # 8. Upload the entire results directory so you can download it after the run.
-      #    You'll find a "tsp-results" zip on the workflow run page.
-      #    include-hidden-files: upload-artifact@v4 skips dotfiles by default, so
-      #    without this the .coral/, .claude/, and .shared/ folders (where all
-      #    attempts, notes, and skills live) would be stripped from the zip.
+      # 8. Archive and upload the results directory.
+      #    We tar the folder before uploading because actions/upload-artifact@v4
+      #    strips hidden files by default, and even `include-hidden-files: true`
+      #    has proven unreliable for nested dotfile trees (`.coral/`, `.claude/`,
+      #    `.shared/`, `.git`, `.coral_dir`, …).
+      #    tar preserves every file AND the relative symlinks under `.shared/`
+      #    that point back into `.coral/public/`, so extracting the artifact
+      #    locally reproduces the exact run state — `coral log`, `coral ui`,
+      #    etc. all work against the extracted folder.
+      - name: Archive results
+        if: always()
+        run: |
+          if [ -d results ] && [ -n "$(ls -A results 2>/dev/null)" ]; then
+            tar -czf results.tar.gz results/
+            ls -lh results.tar.gz
+          else
+            echo "::warning::No results directory to archive"
+          fi
+
       - name: Upload results
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: tsp-results-${{ github.run_id }}
-          path: results/
+          path: results.tar.gz
           retention-days: 14
           if-no-files-found: warn
-          include-hidden-files: true

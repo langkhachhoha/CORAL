@@ -73,6 +73,11 @@ erdos_project/
 autoresearch/
 results/
 test_claude_code/
+# Artifacts downloaded from GitHub Actions (never commit — may contain
+# expanded secrets in start_cmd.txt)
+tsp-*/
+*-results/
+results.tar.gz
 
 # Dev artifacts
 scripts/
