@@ -33,7 +33,7 @@ jobs:
   tsp:
     runs-on: ubuntu-latest
     # Keep the smoke-test short. Raise later when you want full runs.
-    timeout-minutes: 3
+    timeout-minutes: 1
 
     steps:
       # 1. Pull the repository code into the runner's workspace.
@@ -98,76 +98,12 @@ jobs:
       #    and the raw `.coral/public/` tree. This is the primary way to inspect
       #    results from a workflow run; dotfiles don't survive the artifact
       #    upload path so we lean on the job log instead.
-      - name: Show run results (attempts, notes, skills, .coral tree)
+      - name: Upload results
         if: always()
-        run: |
-          set +e
-
-          echo "=============================="
-          echo " ATTEMPTS (leaderboard)"
-          echo "=============================="
-          uv run coral log
-          echo
-
-          echo "=============================="
-          echo " NOTES"
-          echo "=============================="
-          uv run coral notes
-          echo
-          echo "--- Full note contents ---"
-          i=1
-          while :; do
-            out=$(uv run coral notes --read "$i" 2>/dev/null)
-            [ -z "$out" ] && break
-            echo "--- Note #$i ---"
-            echo "$out"
-            echo
-            i=$((i+1))
-            [ "$i" -gt 100 ] && break
-          done
-
-          echo "=============================="
-          echo " SKILLS"
-          echo "=============================="
-          uv run coral skills
-          echo
-          echo "--- Skill details ---"
-          # Parse "  N. <name> — ..." lines from `coral skills` and dump each.
-          uv run coral skills 2>/dev/null \
-            | sed -nE 's/^[[:space:]]+[0-9]+\.[[:space:]]+([A-Za-z0-9_-]+).*/\1/p' \
-            | while read -r name; do
-                [ -z "$name" ] && continue
-                echo "--- Skill: $name ---"
-                uv run coral skills --read "$name"
-                echo
-              done
-
-          echo "=============================="
-          echo " .coral/public/ TREE"
-          echo "=============================="
-          # List every file under every run's .coral/public/ so you can see
-          # attempts, notes, skills, checkpoints, logs at a glance.
-          find results -path '*/.coral/public' -type d 2>/dev/null \
-            | while read -r d; do
-                echo "--- $d ---"
-                ( cd "$d" && find . -maxdepth 6 -not -path './.git*' | sort )
-                echo
-              done
-
-          echo "=============================="
-          echo " NOTE & SKILL FILES (raw)"
-          echo "=============================="
-          # Dump every markdown file under notes/ and skills/ so nothing hides
-          # if the coral CLI missed it for any reason.
-          find results -path '*/.coral/public/notes/*' -name '*.md' 2>/dev/null \
-            | sort | while read -r f; do
-                echo "----- $f -----"
-                cat "$f"
-                echo
-              done
-          find results -path '*/.coral/public/skills/*/SKILL.md' 2>/dev/null \
-            | sort | while read -r f; do
-                echo "----- $f -----"
-                cat "$f"
-                echo
-              done
+        uses: actions/upload-artifact@v4
+        with:
+          name: tsp-results-${{ github.run_id }}
+          path: results/${{ github.run_id }}/.coral/
+          retention-days: 14
+          if-no-files-found: warn
+          include-hidden-files: true
