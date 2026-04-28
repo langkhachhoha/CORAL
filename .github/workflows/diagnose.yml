@@ -1,0 +1,167 @@
+name: Diagnose — worktree probe
+
+# Goal: see what an agent's worktree looks like on a GitHub Actions runner
+# and confirm what it can read / write. There are two probes here:
+#
+#   (a) Static probe — runs `python examples/diagnose/static_probe.py`,
+#       which bootstraps a fake worktree using coral's own helpers and
+#       dumps the full tree, the .claude/settings.json permissions block,
+#       every symlink target, and a write-test result. NO API key needed,
+#       takes ~5 seconds. This always runs.
+#
+#   (b) Live probe — runs `coral start -c examples/diagnose/task.yaml`
+#       with a tiny 12-turn agent that reads/writes files exactly as a
+#       real agent would. Skipped if OPENROUTER_API_KEY is not set or if
+#       the dispatch input "run_live" is "false".
+#
+# Both probes upload their artifacts as a single tarball so the .coral/
+# .claude/, and .shared/ trees survive the upload (see the long comment
+# in benchmark-tsp.yml — same reasoning).
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
+on:
+  workflow_dispatch:
+    inputs:
+      run_live:
+        description: "Also run the live agent probe (needs OPENROUTER_API_KEY secret)"
+        default: "true"
+        type: choice
+        options: ["true", "false"]
+      sonnet_model:
+        description: "OpenRouter model to route 'sonnet' traffic to"
+        default: "minimax/minimax-m2.5"
+        type: string
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    # Hard cap so a stuck agent can't burn budget. The live probe targets
+    # ~2 minutes; the static probe is ~5 seconds.
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Install CORAL
+        run: uv sync --extra dev
+
+      # ---------- (a) Static probe — no API key needed ----------
+      - name: Static probe (no agent run)
+        run: |
+          echo "=============================================================="
+          echo " STATIC PROBE — bootstraps a fake worktree and dumps its state"
+          echo "=============================================================="
+          uv run python examples/diagnose/static_probe.py
+
+      # ---------- (b) Live probe — short agent run with explicit FS probes ----------
+      - name: Setup Node.js
+        if: ${{ inputs.run_live == 'true' }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install Claude Code CLI
+        if: ${{ inputs.run_live == 'true' }}
+        run: |
+          npm install -g @anthropic-ai/claude-code
+          claude --version
+
+      - name: Live probe — coral start (max 12 turns)
+        if: ${{ inputs.run_live == 'true' }}
+        env:
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+        run: |
+          if [ -z "$OPENROUTER_API_KEY" ]; then
+            echo "::warning::OPENROUTER_API_KEY not set — skipping live probe"
+            exit 0
+          fi
+          uv run coral start \
+            -c examples/diagnose/task.yaml \
+            run.session=local \
+            run.verbose=true \
+            agents.openrouter.enabled=true \
+            agents.openrouter.api_key="$OPENROUTER_API_KEY" \
+            agents.openrouter.sonnet_model="${{ inputs.sonnet_model }}" \
+            agents.openrouter.opus_model="${{ inputs.sonnet_model }}" \
+            agents.openrouter.haiku_model="${{ inputs.sonnet_model }}" \
+            agents.openrouter.subagent_model="${{ inputs.sonnet_model }}"
+
+      - name: Show leaderboard + notes (live probe)
+        if: ${{ always() && inputs.run_live == 'true' }}
+        run: |
+          set +e
+          echo "=============================="
+          echo " LEADERBOARD"
+          echo "=============================="
+          uv run coral log || true
+          echo
+          echo "=============================="
+          echo " NOTES (full bodies)"
+          echo "=============================="
+          uv run coral notes
+          echo
+          i=1
+          while :; do
+            out=$(uv run coral notes --read "$i" 2>/dev/null)
+            [ -z "$out" ] && break
+            echo "----- Note #$i -----"
+            echo "$out"
+            echo
+            i=$((i+1))
+            [ "$i" -gt 100 ] && break
+          done
+
+      - name: Dump agent log tail
+        if: ${{ always() && inputs.run_live == 'true' }}
+        run: |
+          set +e
+          # Find any agent log under results/ and tail it so the probe
+          # output (steps 1-10 of CORAL.md) is visible inline.
+          for f in $(find results -path '*/.coral/public/logs/*.log' 2>/dev/null | sort); do
+            echo "===== $f (tail 200) ====="
+            tail -n 200 "$f"
+            echo
+          done
+
+      # ---------- Archive + upload (tar so dotfiles & symlinks survive) ----------
+      - name: Archive probe artifacts
+        if: always()
+        run: |
+          set +e
+          # The static probe writes to ./_probe (gitignored); the live
+          # probe writes to ./results/diagnose/<timestamp>/. Tar both so
+          # we can inspect the runner's view of the agent worktree.
+          targets=()
+          [ -d _probe ]   && targets+=(_probe)
+          [ -d results ]  && targets+=(results)
+          if [ ${#targets[@]} -eq 0 ]; then
+            echo "::warning::Nothing to archive (no _probe or results dir)"
+            exit 0
+          fi
+          tar -czf diagnose.tar.gz "${targets[@]}"
+          ls -lh diagnose.tar.gz
+          echo
+          echo "Top-level entries inside the archive:"
+          tar -tzf diagnose.tar.gz | head -60
+
+      - name: Upload diagnose artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: diagnose-${{ github.run_id }}
+          path: diagnose.tar.gz
+          retention-days: 14
+          if-no-files-found: warn

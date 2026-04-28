@@ -138,17 +138,48 @@ jobs:
                 echo
               done
 
-      # 8. Upload the entire results directory so you can download it after the run.
-      #    You'll find a "tsp-results" zip on the workflow run page.
-      #    include-hidden-files: upload-artifact@v4 skips dotfiles by default, so
-      #    without this the .coral/, .claude/, and .shared/ folders (where all
-      #    attempts, notes, and skills live) would be stripped from the zip.
+      # 8. Archive results, then upload the tarball.
+      #
+      #    Why tar instead of `path: results/` + `include-hidden-files: true`?
+      #
+      #    actions/upload-artifact@v4 packages files into a ZIP on the GitHub
+      #    side. ZIP has two properties that bite us:
+      #      (a) it does not preserve POSIX symlinks. The relative symlinks
+      #          inside `agents/agent-N/.claude/{notes,skills,attempts,logs,
+      #          heartbeat}` (which point at `../../../.coral/public/...`)
+      #          get materialised as either empty files or duplicated copies
+      #          on extract, breaking the `coral` tooling against the
+      #          downloaded artifact.
+      #      (b) `include-hidden-files: true` (added in upload-artifact 4.4)
+      #          is honoured for the top-level glob, but several users have
+      #          reported it silently drops nested dotfile trees that the
+      #          underlying @actions/glob picks up. `.coral/`, `.claude/`,
+      #          and `.shared/` are all hidden, deeply nested, and contain
+      #          symlinks — the worst case for that path.
+      #
+      #    tar sidesteps both: it archives every file (hidden or not),
+      #    preserves symlinks verbatim, and produces a single .tar.gz that
+      #    upload-artifact stores as an opaque blob. Extracting it locally
+      #    reproduces the exact run state — `coral log`, `coral ui`, etc.
+      #    work against the extracted folder.
+      - name: Archive results
+        if: always()
+        run: |
+          if [ -d results ] && [ -n "$(ls -A results 2>/dev/null)" ]; then
+            tar -czf results.tar.gz results/
+            ls -lh results.tar.gz
+            echo
+            echo "Top-level entries inside the archive:"
+            tar -tzf results.tar.gz | head -40
+          else
+            echo "::warning::No results directory to archive"
+          fi
+
       - name: Upload results
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: tsp-results-${{ github.run_id }}
-          path: results/
+          path: results.tar.gz
           retention-days: 14
           if-no-files-found: warn
-          include-hidden-files: true

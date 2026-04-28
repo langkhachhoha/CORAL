@@ -1,0 +1,86 @@
+task:
+  name: diagnose
+  description: |
+    DIAGNOSTIC PROBE — do not write any "real" code.
+
+    Your job is to inspect the filesystem of your worktree on the GitHub
+    Actions runner so we can see (a) which files exist, (b) what you can
+    read, and (c) what you can write. Do not try to "solve" anything.
+
+    ## Required steps (run them in order, one tool call each)
+
+    1. Print the worktree root and tree:
+         pwd
+         ls -la
+         find . -maxdepth 4 -not -path './.venv*' -not -path './.git*' | sort
+
+    2. Show the breadcrumb files written by CORAL:
+         cat .coral_agent_id
+         cat .coral_dir
+
+    3. Show the Claude Code permissions block:
+         cat .claude/settings.json
+
+    4. Resolve every symlink in .claude/ and confirm the target exists:
+         ls -laL .claude/
+
+    5. Read your own CORAL.md briefly (head only — it's long):
+         head -40 CORAL.md
+
+    6. Demonstrate WRITE access to the shared notes dir (this is a relative
+       symlink that points back into ../../../.coral/public/notes/):
+         printf '%s\n' '---' 'creator: probe' 'created: 2026-04-28' '---' \
+           '# Probe note' '' 'Hello from the diagnose task — write succeeded.' \
+           > .claude/notes/diagnose-probe.md
+         ls -la .claude/notes/
+         cat .claude/notes/diagnose-probe.md
+
+    7. Demonstrate WRITE access via the absolute symlink target (the path
+       under .coral/public/) and confirm the file is the same one:
+         abs_dir=$(cat .coral_dir)/public/notes
+         echo "[probe] resolved abs notes dir: $abs_dir"
+         printf '%s\n' '---' 'creator: probe-abs' 'created: 2026-04-28' '---' \
+           '# Probe note via absolute path' \
+           > "$abs_dir/diagnose-probe-abs.md"
+         ls -la "$abs_dir"
+
+    8. Demonstrate that the PRIVATE dir is denied to you (this MUST fail —
+       capture the error and keep going):
+         priv=$(cat .coral_dir)/private
+         echo "[probe] attempting to read private dir at: $priv"
+         ls -la "$priv" || echo "[probe] read denied as expected"
+         cat "$priv/grader.py" 2>&1 | head -5 || true
+
+    9. Read a file from the seed repo to confirm Read access works:
+         find . -maxdepth 3 -name '*.py' -not -path './.venv*' | head -5
+         head -20 probe.py
+
+    10. Run `coral eval -m "diagnose probe complete"` once to record an
+        attempt and exit. The grader is trivial — it always returns 0.
+
+    Keep responses terse. Do NOT loop. After step 10 you are DONE.
+
+grader:
+  timeout: 30
+  type: function
+  module: eval.grader
+
+agents:
+  count: 1
+  runtime: claude_code
+  model: sonnet
+  max_turns: 12
+  research: false
+
+  openrouter:
+    enabled: true
+    api_key: ""
+    base_url: "https://openrouter.ai/api"
+    opus_model: "minimax/minimax-m2.5"
+    sonnet_model: "minimax/minimax-m2.5"
+    haiku_model: "minimax/minimax-m2.5"
+    subagent_model: "minimax/minimax-m2.5"
+
+workspace:
+  results_dir: "./results"
+  repo_path: "./examples/diagnose/seed"

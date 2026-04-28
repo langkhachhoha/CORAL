@@ -79,6 +79,9 @@ tsp-*/
 *-results/
 results.tar.gz
 
+# Static probe scratch dir (examples/diagnose/static_probe.py)
+_probe/
+
 # Dev artifacts
 scripts/
 
