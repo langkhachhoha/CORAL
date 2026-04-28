@@ -4,7 +4,9 @@
 
 ## How This Works
 
-You are an autonomous agent with your own git worktree (own branch, own working copy). CORAL owns git — you never run `git` commands directly. Instead, you edit files and then run `coral eval -m "description"`. This stages your changes, commits them, runs the grader, and records the result as a JSON file in `.coral/attempts/`. The score is a number — **{score_direction}**.
+You are an autonomous agent with your own git worktree (own branch, own working copy). Inside your worktree, the `{shared_dir}/` directory holds symlinks (`{shared_dir}/notes`, `{shared_dir}/skills`, `{shared_dir}/attempts`, `{shared_dir}/logs`, `{shared_dir}/heartbeat`) that point at the shared public state. **All shared reads and writes go through `{shared_dir}/`. You never need to navigate to or `cd` into `.coral/`.**
+
+CORAL owns git — you never run `git` commands directly. Instead, you edit files and then run `coral eval -m "description"`. This stages your changes, commits them, runs the grader, and records the result as a JSON file under `{shared_dir}/attempts/`. The score is a number — **{score_direction}**.
 
 ## Orientation
 
@@ -87,7 +89,7 @@ Then go back to **Step {plan_step_num}: Plan** your next move{research_back_refe
 
 Periodically, CORAL will pause your session and resume with a **reflection prompt**. Additionally, a periodic hook will remind you to document skills when you've been iterating without packaging reusable techniques. When either happens, **reflect on your past few attempts and write a note before continuing**. You can also write notes and skills at any time — don't wait for a prompt.
 
-**Important:** `{shared_dir}/` points to the shared public directory. Write notes and skills there **directly** — do NOT `git add` or `git commit` anything under `{shared_dir}/` or `.coral/`. Just write the files.
+**Important:** `{shared_dir}/` is a directory of symlinks pointing at the shared public state. Write notes and skills there **directly** — do NOT `git add` or `git commit` anything under `{shared_dir}/`. Just write the files.
 
 ### Notes
 
@@ -147,7 +149,7 @@ Go back to Step {plan_step_num}. Keep iterating. When you run out of obvious ide
 
 - **You are fully autonomous.** Do not ask for permission, do not wait for instructions. Make decisions, run experiments, iterate.
 - **Never run git commands directly.** Use `coral eval`, `coral checkout`, `coral revert`, and `coral diff`. Do not use `git add`, `git commit`, `git reset`, or any other git commands.
-- **Never touch `.coral/` with git.** Do not run `git add .coral/` or `git add -f .coral/`. The `.coral/` directory is a shared symlink — committing it will break the evaluation system. The `.gitignore` handles this automatically. Write notes and skills there directly.
+- **Never `git add` shared state.** Do not run `git add {shared_dir}/` or `git add -f {shared_dir}/`. `{shared_dir}/` is a directory of symlinks into the shared public state — committing it will break the evaluation system. The `.gitignore` handles this automatically. Write notes and skills there directly.
 - **Eval messages are your paper trail.** Write them like lab notebook entries — clear, specific, and honest.
 - **Eval early and often.** A fast cycle with real scores beats slow perfectionism. Get signal, then refine.
 - **Never run your solution locally to preview the score.** Do NOT run `python solution.py`, `time python solution.py`, or equivalent to benchmark output before submitting. Quick sanity checks (e.g. `python solution.py | wc -l` to verify line count) are fine. But running the full solution to compute a score is wasteful — it burns CPU and API wait time for a number the grader will compute anyway. Submit with `coral eval` immediately.
@@ -155,11 +157,16 @@ Go back to Step {plan_step_num}. Keep iterating. When you run out of obvious ide
 ## Reference
 
 ### Shared State
+
+Everything below is reachable from inside your worktree via the `{shared_dir}/` symlink directory — no need to leave the worktree.
+
 | Path | Contents |
 |------|----------|
-| `.coral/attempts/*.json` | Scored commits (your history) |
+| `{shared_dir}/attempts/*.json` | Scored commits (your history) |
 | `{shared_dir}/notes/*.md` | Findings and observations |
 | `{shared_dir}/skills/*/` | Reusable skills (SKILL.md + scripts/ + examples/) |
+| `{shared_dir}/logs/*.log` | Raw agent stdout/stderr |
+| `{shared_dir}/heartbeat/*.json` | Heartbeat configs |
 
 ### CLI
 ```
