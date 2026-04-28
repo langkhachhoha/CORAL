@@ -60,6 +60,7 @@ Thumbs.db
 
 # Project specific
 *.log
+log.txt
 .env
 .env.*
 secrets.env
@@ -78,9 +79,6 @@ test_claude_code/
 tsp-*/
 *-results/
 results.tar.gz
-
-# Static probe scratch dir (examples/diagnose/static_probe.py)
-_probe/
 
 # Dev artifacts
 scripts/

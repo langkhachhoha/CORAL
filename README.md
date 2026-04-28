@@ -449,7 +449,14 @@ uv run coral start -c task.yaml \
 
 ### Running benchmarks on GitHub Actions
 
-CORAL ships with a **manual-trigger workflow** at [`.github/workflows/benchmark-tsp.yml`](.github/workflows/benchmark-tsp.yml) that runs the TSP benchmark end-to-end on a GitHub-hosted runner, using OpenRouter for the model backend. Use this as a working template when you want to automate any other benchmark.
+CORAL ships with **manual-trigger workflows** that run a benchmark end-to-end on a GitHub-hosted runner, using OpenRouter for the model backend. Each workflow corresponds to one task YAML and is configured for **1 agent**, model `minimax/minimax-m2.5`, and `research: false` — a cheap smoke test you can run from the **Actions** tab in one click.
+
+| Workflow file | Default task YAML | Artifact name |
+| --- | --- | --- |
+| [`benchmark-tsp.yml`](.github/workflows/benchmark-tsp.yml) | `examples/tsp/task_1agent.yaml` | `tsp-results-<run_id>` |
+| [`benchmark-signal-processing.yml`](.github/workflows/benchmark-signal-processing.yml) | `examples/math/signal_processing/task_1agent.yaml` | `signal-processing-results-<run_id>` |
+| [`benchmark-circle-packing.yml`](.github/workflows/benchmark-circle-packing.yml) | `examples/math/circle_packing/task_1agent.yaml` | `circle-packing-results-<run_id>` |
+| [`benchmark-erdos-min-overlap.yml`](.github/workflows/benchmark-erdos-min-overlap.yml) | `examples/math/erdos_min_overlap/task_1agent.yaml` | `erdos-min-overlap-results-<run_id>` |
 
 #### Prerequisites (one-time)
 
@@ -463,40 +470,43 @@ CORAL ships with a **manual-trigger workflow** at [`.github/workflows/benchmark-
 #### Trigger a run
 
 1. Open the **Actions** tab at the top of your GitHub repo.
-2. In the left sidebar pick **Benchmark — TSP**.
-3. Click **Run workflow** (top-right). A modal appears with four text inputs.
+2. In the left sidebar pick the workflow you want — e.g. **Benchmark — Circle Packing**.
+3. Click **Run workflow** (top-right). A modal appears with three text inputs (`task_file`, `max_turns`, `sonnet_model`).
 4. Keep the defaults (or override — see below) and click the green **Run workflow** button.
 
-#### Inputs
+#### Inputs (every benchmark workflow)
 
-All four are [`workflow_dispatch`](https://docs.github.com/en/actions/using-workflows/events-that-trigger-workflows#workflow_dispatch) inputs and appear as text boxes in the "Run workflow" modal.
+All inputs are [`workflow_dispatch`](https://docs.github.com/en/actions/using-workflows/events-that-trigger-workflows#workflow_dispatch) text boxes in the "Run workflow" modal.
 
 | Input | Default | Meaning |
 | --- | --- | --- |
-| `task_file` | `examples/tsp/task_1agent.yaml` | Task YAML to run, path relative to repo root. Swap in any other task YAML here. |
+| `task_file` | per-workflow (see table above) | Task YAML to run, path relative to repo root. Swap in any other task YAML here. |
 | `max_turns` | `100` | Max turns per agent before it reboots. Larger = longer run + more tokens. |
-| `agents_count` | `1` | Number of parallel agents. Each one independently consumes tokens. |
 | `sonnet_model` | `minimax/minimax-m2.5` | OpenRouter model slug. Applied to **all four** tiers (opus/sonnet/haiku/subagent) so every Claude Code call hits the same model. |
+| `agents_count` *(TSP only)* | `1` | Number of parallel agents. The math workflows are pinned to 1 agent. |
 
-#### What the workflow does
+#### What every workflow does
 
 1. **Checkout** the repo.
 2. **Setup Python 3.12** + **install `uv`** (with cache).
 3. **`uv sync --extra dev`** to install CORAL.
-4. **Run `coral start`** with dotlist overrides:
+4. **Setup Node.js 20 + install Claude Code CLI** (`npm install -g @anthropic-ai/claude-code`).
+5. **Run `coral start`** with dotlist overrides:
    - `run.session=local` — no tmux/docker (CI has no TTY).
    - `run.verbose=true` — stream agent turns straight into the CI log.
+   - `agents.count=1`, `agents.research=false` (math workflows pin both).
    - `agents.openrouter.api_key="$OPENROUTER_API_KEY"` — injects the secret into each agent's `.claude/settings.json` (`ANTHROPIC_AUTH_TOKEN`).
    - `agents.openrouter.{opus,sonnet,haiku,subagent}_model=<input>` — forces the chosen slug onto every tier.
-5. **Print the leaderboard** with `uv run coral log` (runs `if: always()` so you still see it on failure/timeout).
-6. **Upload `results/`** as an artifact named `tsp-results-<run_id>` (retention: 14 days).
+6. **Print the leaderboard** with `uv run coral log` (runs `if: always()` so you still see it on failure/timeout).
+7. **Print every note + every skill** with `uv run coral notes` / `coral skills` so the full bodies are inline in the CI log (no artifact download needed for a quick look).
+8. **Upload `results/`** as an artifact (`include-hidden-files: true` so `.coral/`, `.claude/`, and `.shared/` are kept; retention: 14 days).
 
-Job timeout: **30 minutes** (`timeout-minutes: 30`). Raise it in the workflow file for longer runs.
+Job timeout: **30 minutes** for the math workflows, **10 minutes** for TSP. Raise either in the workflow file for longer runs.
 
 #### Outputs
 
-1. **Live CI log** — agent output + the final leaderboard, visible as the run progresses and archived on the workflow run page.
-2. **Artifact `tsp-results-<run_id>`** — the entire `results/<task>/<timestamp>/` directory, zipped. Download from the workflow run page and inspect locally:
+1. **Live CI log** — agent output + the final leaderboard + every note/skill body, visible as the run progresses and archived on the workflow run page.
+2. **Artifact `<task>-results-<run_id>`** — the entire `results/<task>/<timestamp>/` directory, zipped. Download from the workflow run page and inspect locally:
    - `.coral/public/attempts/` — one JSON per commit, with score and metadata.
    - `.coral/public/notes/`, `skills/` — shared agent knowledge.
    - `.coral/public/logs/` — raw agent stdout/stderr.
@@ -505,7 +515,7 @@ Job timeout: **30 minutes** (`timeout-minutes: 30`). Raise it in the workflow fi
    Open it in the dashboard locally:
 
    ```bash
-   unzip tsp-results-<run_id>.zip -d ./
+   unzip <task>-results-<run_id>.zip -d ./
    uv run coral ui                     # pick the run from the dropdown
    ```
 
@@ -517,31 +527,58 @@ Job timeout: **30 minutes** (`timeout-minutes: 30`). Raise it in the workflow fi
   2. Run a [self-hosted runner](https://docs.github.com/en/actions/hosting-your-own-runners) on your own machine and browse `localhost:8420` directly.
   3. Post-run: download the artifact and open `coral ui` locally (no setup).
 
-#### Local equivalent
+#### Testing locally before pushing to CI
 
-The workflow is just a wrapper around the same CLI you'd run locally:
+Each workflow is just a wrapper around `coral start` with the same dotlist overrides. To smoke-test on your laptop with the same model + flags as CI:
 
 ```bash
-set -a && source .env && set +a           # loads OPENROUTER_API_KEY into shell env
-uv run coral start -c examples/tsp/task_1agent.yaml \
+# One-time: drop your key in .env (gitignored)
+echo "OPENROUTER_API_KEY=sk-or-v1-YOUR_KEY" >> .env
+set -a && source .env && set +a
+
+# Pick one of the four task files. The dotlist below is identical to what the workflow sends.
+TASK=examples/math/circle_packing/task_1agent.yaml   # or signal_processing / erdos_min_overlap / tsp
+
+uv run coral start \
+  -c "$TASK" \
   run.session=local \
   run.verbose=true \
   agents.count=1 \
+  agents.research=false \
   agents.max_turns=100 \
   agents.openrouter.enabled=true \
   agents.openrouter.api_key="$OPENROUTER_API_KEY" \
-  agents.openrouter.sonnet_model="minimax/minimax-m2.5" \
-  agents.openrouter.opus_model="minimax/minimax-m2.5" \
-  agents.openrouter.haiku_model="minimax/minimax-m2.5" \
-  agents.openrouter.subagent_model="minimax/minimax-m2.5"
+  agents.openrouter.sonnet_model=minimax/minimax-m2.5 \
+  agents.openrouter.opus_model=minimax/minimax-m2.5 \
+  agents.openrouter.haiku_model=minimax/minimax-m2.5 \
+  agents.openrouter.subagent_model=minimax/minimax-m2.5
 ```
+
+While it runs, in another terminal:
+
+```bash
+uv run coral status      # agent health + current best score
+uv run coral log         # leaderboard
+uv run coral notes       # everything the agent has written
+uv run coral ui          # web dashboard at http://localhost:8420
+uv run coral stop        # kill all agents
+```
+
+If `coral status` shows the agent alive and `coral log` lists at least one attempt with a non-null score after a few minutes, the task config and grader are wired up correctly — pushing to CI from there will behave the same way.
+
+> **Tip — even cheaper local smoke test.** Skip the agent entirely and run the grader directly to confirm the seed runs and the eval pipeline works:
+>
+> ```bash
+> uv run coral validate examples/math/circle_packing
+> ```
 
 #### Adapting to other benchmarks
 
-Copy `benchmark-tsp.yml`, rename the file + the workflow `name:` + the job id, and change:
+Copy any of the four workflow files, rename the file + the workflow `name:` + the job id, and change:
 
 - The default `task_file` input to your new task YAML.
-- Optionally task-specific defaults for `max_turns`, `agents_count`, `sonnet_model`.
+- The artifact `name:` so it doesn't collide with another workflow.
+- Optionally task-specific defaults for `max_turns` and `sonnet_model`.
 
 The `run.session=local` + OpenRouter dotlist block stays identical across benchmarks.
 
@@ -550,15 +587,17 @@ The `run.session=local` + OpenRouter dotlist block stays identical across benchm
 Ready-to-run task configurations in `examples/`:
 
 
-| Task                       | Domain       | Description                                                 |
-| -------------------------- | ------------ | ----------------------------------------------------------- |
-| **circle_packing**         | Optimization | Pack 26 circles into a unit square to maximize sum of radii |
-| **erdos**                  | Mathematics  | Solve a math conjecture                                     |
-| **kernel_builder**         | Systems      | VLIW SIMD kernel optimization                               |
-| **kernel_engineering**     | Systems      | GPU kernel optimization                                     |
-| **mnist**                  | ML           | Handwritten digit classification                            |
-| **spaceship_titanic**      | ML           | Kaggle competition                                          |
-| **stanford_covid_vaccine** | Bio/ML       | mRNA degradation prediction                                 |
+| Task                       | Domain       | Description                                                 | 1-agent CI workflow |
+| -------------------------- | ------------ | ----------------------------------------------------------- | ------------------- |
+| **tsp**                    | Optimization | Shortest 100-city round-trip tour                           | [`benchmark-tsp.yml`](.github/workflows/benchmark-tsp.yml) |
+| **math/signal_processing** | Math/Signal  | Adaptive filter for non-stationary time series              | [`benchmark-signal-processing.yml`](.github/workflows/benchmark-signal-processing.yml) |
+| **math/circle_packing**    | Optimization | Pack 26 circles into a unit square to maximize sum of radii | [`benchmark-circle-packing.yml`](.github/workflows/benchmark-circle-packing.yml) |
+| **math/erdos_min_overlap** | Mathematics  | Upper bound on the Erdős–Selfridge C5 constant              | [`benchmark-erdos-min-overlap.yml`](.github/workflows/benchmark-erdos-min-overlap.yml) |
+| **kernel_builder**         | Systems      | VLIW SIMD kernel optimization                               | — |
+| **kernel_engineering**     | Systems      | GPU kernel optimization                                     | — |
+| **mnist**                  | ML           | Handwritten digit classification                            | — |
+| **spaceship_titanic**      | ML           | Kaggle competition                                          | — |
+| **stanford_covid_vaccine** | Bio/ML       | mRNA degradation prediction                                 | — |
 
 
 ### Development

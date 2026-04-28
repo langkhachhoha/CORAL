@@ -1,11 +1,8 @@
-name: Benchmark — TSP
+name: Benchmark — Signal Processing
 
-# "on" tells GitHub WHEN to run this workflow.
-# workflow_dispatch = manual trigger from the Actions tab (with a "Run workflow" button).
-# You can add `push:` or `schedule:` later if you want it to run automatically.
-# Opt into Node.js 24 for JS-based actions now (they default to Node 20,
-# which GitHub is deprecating — see
-# https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/).
+# Smoke test for examples/math/signal_processing on a GitHub Actions runner.
+# 1 agent, model = minimax/minimax-m2.5, research disabled.
+# Manual trigger only — see README for how to launch from the Actions tab.
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
 
@@ -14,51 +11,39 @@ on:
     inputs:
       task_file:
         description: "Task YAML (relative to repo root)"
-        default: "examples/tsp/task_1agent.yaml"
+        default: "examples/math/signal_processing/task_1agent.yaml"
         type: string
       max_turns:
-        description: "Max turns per agent (keep small to stay within the job timeout)"
+        description: "Max turns per agent"
         default: "100"
         type: string
-      agents_count:
-        description: "Number of parallel agents"
-        default: "1"
-        type: string
       sonnet_model:
-        description: "OpenRouter model to route 'sonnet' traffic to"
+        description: "OpenRouter model to route 'sonnet'/'opus'/'haiku' traffic to"
         default: "minimax/minimax-m2.5"
         type: string
 
 jobs:
-  tsp:
+  signal_processing:
     runs-on: ubuntu-latest
-    # Keep the smoke-test short. Raise later when you want full runs.
-    timeout-minutes: 10
+    timeout-minutes: 30
 
     steps:
-      # 1. Pull the repository code into the runner's workspace.
       - name: Checkout repo
         uses: actions/checkout@v4
 
-      # 2. Install Python. CORAL targets 3.11+.
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
 
-      # 3. Install `uv` (the package manager CORAL uses).
       - name: Install uv
         uses: astral-sh/setup-uv@v5
         with:
           enable-cache: true
 
-      # 4. Install CORAL and its dependencies into a local .venv.
       - name: Install CORAL
         run: uv sync --extra dev
 
-      # 5. Install the Claude Code CLI.
-      #    CORAL's `runtime: claude_code` spawns the `claude` binary as a subprocess,
-      #    so the CLI must be on PATH. We install Node LTS + the npm package.
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
@@ -69,11 +54,7 @@ jobs:
           npm install -g @anthropic-ai/claude-code
           claude --version
 
-      # 6. Run the benchmark.
-      #    - run.session=local: no tmux/docker (CI has no TTY).
-      #    - agents.openrouter.*: route Claude Code traffic through OpenRouter.
-      #    - The API key comes from the repo secret OPENROUTER_API_KEY (see README).
-      - name: Run CORAL — TSP
+      - name: Run CORAL — Signal Processing
         env:
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
         run: |
@@ -85,7 +66,8 @@ jobs:
             -c "${{ inputs.task_file }}" \
             run.session=local \
             run.verbose=true \
-            agents.count=${{ inputs.agents_count }} \
+            agents.count=1 \
+            agents.research=false \
             agents.max_turns=${{ inputs.max_turns }} \
             agents.openrouter.enabled=true \
             agents.openrouter.api_key="$OPENROUTER_API_KEY" \
@@ -94,19 +76,14 @@ jobs:
             agents.openrouter.haiku_model="${{ inputs.sonnet_model }}" \
             agents.openrouter.subagent_model="${{ inputs.sonnet_model }}"
 
-      # 7. Print a compact leaderboard so you can see the best score right in the log.
       - name: Show leaderboard
         if: always()
         run: uv run coral log || true
 
-      # 7b. Show every note and every skill written during the run. For each
-      #     one we print the name/header and the full body so you can inspect
-      #     them directly from the job log (no artifact download needed).
       - name: Show notes and skills
         if: always()
         run: |
           set +e
-
           echo "=============================="
           echo " NOTES"
           echo "=============================="
@@ -122,13 +99,11 @@ jobs:
             i=$((i+1))
             [ "$i" -gt 100 ] && break
           done
-
           echo "=============================="
           echo " SKILLS"
           echo "=============================="
           uv run coral skills
           echo
-          # Parse "  N. <name> — ..." from `coral skills` and dump each.
           uv run coral skills 2>/dev/null \
             | sed -nE 's/^[[:space:]]+[0-9]+\.[[:space:]]+([A-Za-z0-9_-]+).*/\1/p' \
             | while read -r name; do
@@ -138,16 +113,11 @@ jobs:
                 echo
               done
 
-      # 8. Upload the entire results directory so you can download it after the run.
-      #    You'll find a "tsp-results" zip on the workflow run page.
-      #    include-hidden-files: upload-artifact@v4 skips dotfiles by default, so
-      #    without this the .coral/, .claude/, and .shared/ folders (where all
-      #    attempts, notes, and skills live) would be stripped from the zip.
       - name: Upload results
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: tsp-results-${{ github.run_id }}
+          name: signal-processing-results-${{ github.run_id }}
           path: results/
           retention-days: 14
           if-no-files-found: warn
