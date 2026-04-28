@@ -42,7 +42,7 @@ grader:
 agents:
   count: 1
   runtime: claude_code
-  model: minimax/minimax-m2.5
+  model: minimax/minimax-m2.7
   max_turns: 100
   research: false
 
